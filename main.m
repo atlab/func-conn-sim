@@ -1,14 +1,54 @@
 function main
-[C, ~, ne] = load_matrices('./data/dataset3/SpikingSim1WS.mat');
-d = 5;  %downsample factor  -- replace with randsample
-ne = floor(ne/d);
-C = C(1:d:end,1:d:end);
-plot_correlations(corrcov(C));
-S = get_partials(C);
-[Cee, Cei, Cii] = mean_strength(corrcov(C), ne);
-[See, Sei, Sii] = mean_strength(-corrcov(S), ne);
-plot([Cee Cei Cii; See Sei Sii]')
-legend corrs parcorrs
+processSim('./data/dataset3/SpikingSim1WS.mat', 'simulation 1', './sim1')
+processSim('./data/dataset3/SpikingSim2WS.mat', 'simulation 2', './sim2')
+processSim('./data/dataset3/SpikingSim3WS.mat', 'simulation 3', './sim3')
+end
+
+
+function processSim(path, title_, figurefile)
+[Cee, Cei, Cii, See, Sei, Sii] = avgCorrs(path);
+subplot 121, plotAverages([Cee Cei Cii]), title corrs
+subplot 122, plotAverages([See Sei Sii]), title 'pcorrs'
+suptitle(title_)
+set(gcf, 'PaperSize', [4 4], 'PaperPosition', [0 0 4 4])
+print('-dpdf', figurefile)
+end
+
+
+function plotAverages(X)
+plot(X', 'k.-', 'MarkerSize', 20)
+xlim([0.5 3.5]) 
+set(gca, 'XTick', 1:3, 'XTickLabel', {'EE' 'EI' 'II'})
+yticks = -0.02:0.01:0.03;
+ytickLabels = arrayfun(@(x) sprintf('%1.2f', x), yticks, 'uni', false);
+set(gca, 'YTick', yticks, 'YTickLabels', ytickLabels) 
+ylim([-0.012 0.021])
+grid on
+end
+
+
+function [Cee, Cei, Cii, See, Sei, Sii] = avgCorrs(filepath)
+[CC, ~, ne] = load_matrices(filepath);
+n = size(CC,1);
+fraction = 0.5;  % fraction of the network
+ntrials = 20;
+Cee = nan(ntrials,1);
+Cei = nan(ntrials,1);
+Cii = nan(ntrials,1);
+See = nan(ntrials,1);
+Sei = nan(ntrials,1);
+Sii = nan(ntrials,1);
+progress_bar = waitbar(0, 'Averaging trials ...');
+for trial = 1:ntrials
+    waitbar(trial/ntrials)
+    ix = rand(n,1) < fraction;
+    ne_ = sum(ix(1:ne));
+    C = CC(ix, ix);
+    S = get_partials(C);
+    [Cee(trial), Cei(trial), Cii(trial)] = mean_strength(corrcov(C), ne_);
+    [See(trial), Sei(trial), Sii(trial)] = mean_strength(-corrcov(S), ne_);
+end
+close(progress_bar)
 end
 
 
@@ -23,10 +63,14 @@ end
 
 function K = get_partials(C)
 % estimatate partial correlations using lv-glasso
-alpha = 0.001;
-beta = 0.1;
+alpha = 0.002;
+beta = 0.05;
 out = lvglasso(C, alpha, beta);
 K = out.S + out.L;
+n = size(K,1);
+[i,j] = meshgrid(1:n, 1:n);
+fprintf('Connectivity: %1.3f     ', 1-mean(~out.S(i<j)));
+fprintf('Latent Units: %d / %d\n', sum(logical(out.eigL)), n);
 end
 
 
