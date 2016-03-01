@@ -1,37 +1,42 @@
 function main
-processSim('./data/dataset3/SpikingSim1WS.mat', 'simulation 1', './sim1')
-processSim('./data/dataset3/SpikingSim2WS.mat', 'simulation 2', './sim2')
-processSim('./data/dataset3/SpikingSim3WS.mat', 'simulation 3', './sim3')
+processSim('./data/dataset5/SpikingSim1BWS.mat', 'sim 1', './sim1')
+processSim('./data/dataset5/SpikingSim2WS.mat', 'sim 2', './sim2')
+processSim('./data/dataset4/SpikingSim3WS.mat', 'sim 3', './sim3')
 end
 
 
 function processSim(path, title_, figurefile)
 [Cee, Cei, Cii, See, Sei, Sii] = avgCorrs(path);
 subplot 121, plotAverages([Cee Cei Cii]), title corrs
-subplot 122, plotAverages([See Sei Sii]), title 'pcorrs'
+subplot 122, plotAverages([See Sei Sii]), title 'pcorrs', set(gca, 'YTickLabels',{})
 suptitle(title_)
-set(gcf, 'PaperSize', [4 4], 'PaperPosition', [0 0 4 4])
+set(gcf, 'PaperSize', [1 1]*3, 'PaperPosition', [0 0 1 1]*3)
 print('-dpdf', figurefile)
 end
 
 
 function plotAverages(X)
-plot(X', 'k.-', 'MarkerSize', 20)
+plot(X', 'k-')
+hold on
+plot(X', 'k^', 'MarkerSize', 4, 'MarkerFaceColor', [.5 .5 .5])
+plot([0 4],[0 0])
+hold off
+box off
 xlim([0.5 3.5]) 
-set(gca, 'XTick', 1:3, 'XTickLabel', {'EE' 'EI' 'II'})
-yticks = -0.02:0.01:0.03;
+set(gca, 'XTick', 1:3, 'XTickLabel', {'E/E' 'E/I' 'I/I'})
+yticks = -0.02:0.01:0.06;
 ytickLabels = arrayfun(@(x) sprintf('%1.2f', x), yticks, 'uni', false);
 set(gca, 'YTick', yticks, 'YTickLabels', ytickLabels) 
-ylim([-0.012 0.021])
+ylim([-0.012 0.042])
 grid on
 end
 
 
 function [Cee, Cei, Cii, See, Sei, Sii] = avgCorrs(filepath)
-[CC, ~, ne] = load_matrices(filepath);
+[CC, JJ, ne] = load_matrices(filepath);
 n = size(CC,1);
-fraction = 0.5;  % fraction of the network
-ntrials = 20;
+fraction = 0.4;  % fraction of the network
+ntrials = 11;
 Cee = nan(ntrials,1);
 Cei = nan(ntrials,1);
 Cii = nan(ntrials,1);
@@ -44,9 +49,11 @@ for trial = 1:ntrials
     ix = rand(n,1) < fraction;
     ne_ = sum(ix(1:ne));
     C = CC(ix, ix);
+    J = JJ(ix, ix);
     S = get_partials(C);
     [Cee(trial), Cei(trial), Cii(trial)] = mean_strength(corrcov(C), ne_);
     [See(trial), Sei(trial), Sii(trial)] = mean_strength(-corrcov(S), ne_);
+    plot_connectivity(J, C, S);
 end
 close(progress_bar)
 end
@@ -66,7 +73,7 @@ function K = get_partials(C)
 alpha = 0.002;
 beta = 0.05;
 out = lvglasso(C, alpha, beta);
-K = out.S + out.L;
+K = out.S - out.L;
 n = size(K,1);
 [i,j] = meshgrid(1:n, 1:n);
 fprintf('Connectivity: %1.3f     ', 1-mean(~out.S(i<j)));
@@ -74,20 +81,20 @@ fprintf('Latent Units: %d / %d\n', sum(logical(out.eigL)), n);
 end
 
 
-function plot_correlations(R)
-subplot 211
-n = size(R,1);
-imagesc(R(1:10:end,1:10:end), [-1 1]*0.1)
-axis image
-colormap(doppler)
-colorbar
-subplot 212
-[i,j] = meshgrid(1:n, 1:n);
-hist(R(i<j),100);
-grid on
-hist(R(i<j),100);
+function plot_connectivity(truth, cov, icov)
+[i, j] = meshgrid(1:size(icov,1), 1:size(icov,1));
+subplot 131
+imagesc(logical(truth));  axis image
+frac = mean(logical(truth(i<j)));
+subplot 132
+R = corrcov(cov);
+thresh = quantile(abs(R(i<j)), 1-frac);
+imagesc(abs(R)>thresh & i~=j);
+subplot 133
+S = -corrcov(icov);
+thresh = quantile(abs(S(i<j)), 1-frac);
+imagesc(abs(S)>thresh & i~=j);
 end
-
 
 
 function [C, J, ne] = load_matrices(filename)
